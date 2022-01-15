@@ -3,117 +3,164 @@ package com.snake.game.game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 
+import com.snake.game.game.Input.IInputController;
+import com.snake.game.game.Input.InputController;
+import com.snake.game.game.Input.InputEvent;
 import com.snake.game.models.Board;
+import com.snake.game.primitives.Direction;
 import com.snake.game.models.Snake;
+import com.snake.game.primitives.Level;
+import com.snake.game.primitives.MoveResponse;
+import com.snake.game.primitives.Position;
+import com.snake.game.utils.Writer;
+
+import static com.snake.game.game.GameState.LEVEL_THRESHOLD;
 
 
-public class GameController {
+public class GameController extends Thread implements IInputController  {
 
     private static final int WIDTH = Gdx.graphics.getWidth();
     private static final int HEIGHT = Gdx.graphics.getHeight();
 
-    private Board board;
     private Snake snake;
+    private Board board;
 
     private boolean isGameStart;
     private boolean isGameOver;
+    private MoveResponse response;
+    private Level currentLevel;
 
-    private float accumulatedTime;
-    private float speed;
-    private BitmapFont Writer;
+    private boolean run = true;
+    private long lastRun;
+    private long accumulatedTime;
+//    private float accumulatedTime;
+    private long speed;
 
+    private Writer writer;
 
-    public GameController() {
-        TextureAtlas atlas = AssetController.instance().get(AssetController.ELEMENTS_PACK);
-        Writer = AssetController.instance().get(AssetController.PIXEL_FONT);
-        Writer.setColor(Color.BLACK);
-        snake = new Snake(atlas);
-        board = new Board(snake, WIDTH, HEIGHT);
-        board.generateFood();
+    private boolean keyPressed = false;
+
+    public GameController(InputController ic) {
+
+        ic.addListener(this);
+
+        snake = new Snake(ic);
+
+        isGameStart = true;
+        isGameOver = false;
+
+        accumulatedTime = 0;
+        writer = new Writer(Color.BLACK);
+
+        currentLevel = Level.lvl0;
         init();
     }
 
-    private void init() {
-        isGameStart = true;
-        speed = 0.09f;
+    public void cancel() {
+        this.run = false;
     }
 
-    public void update(float delta) {
-        if (isGameStart) { // GameStart
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) start();
-        } else {
-            if (snake.isAlive()) { // Playing
-                accumulatedTime += delta;
-                snake.handleInput();
-                if (accumulatedTime >= speed) {
-                    snake.move();
-                    accumulatedTime = 0;
+    public void run() {
+        System.out.println("Game Controller running");
+
+        while(run) {
+
+            try {
+                if (isGameStart) { // GameStart
+
+                    if (keyPressed) {
+                        keyPressed = false;
+                        lastRun = System.currentTimeMillis();
+                        startGame();
+                    }
+
+                } else {
+
+                    if (snake.isAlive()) { // Playing
+                        long now = System.currentTimeMillis();
+                        accumulatedTime += now - lastRun;
+                        lastRun = now;
+
+                        if (accumulatedTime >= speed) {
+                            response = board.moveSnake(Direction.RIGHT);
+                            accumulatedTime = 0;
+
+                            if (response == MoveResponse.CRASHED) {
+                                snake.die();
+                                if(Snake.lives() == 0) currentLevel = Level.lvl0;
+                                else init();
+                            }
+
+                            if (response == MoveResponse.EATEN) {
+                                ScoreManager.score();
+                            }
+                        }
+
+                        if (ScoreManager.getScore() >= LEVEL_THRESHOLD) {
+                            currentLevel = currentLevel.next();
+                            init();
+                        }
+
+                    } else { // GameOver
+
+                        isGameOver = true;
+                        if (keyPressed) {
+                            keyPressed = false;
+                            snake.live();
+                            init();
+                        }
+                    }
                 }
-                if (snake.isCrash()) {
-                    snake.reset();
-                    snake.die();
-                }
-                if (snake.isFoodTouch(board.food)) {
-                    ScoreManager.score();
-                    snake.grow();
-                    board.generateFood();
-                }
-            } else { // GameOver
-                isGameOver = true;
-                if (Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY)) restart();
+
+                Thread.sleep(10);
+
+            } catch (Exception e) {
+
+                break;
             }
-        }
+        } // while
     }
 
-    private void start() {
+    private void startGame() {
         isGameStart = false;
+        snake.live();
     }
 
-    private void restart() {
+    private void init() {
+        board = MapManager.instance().LoadMap("maps/" + currentLevel.toString() + ".txt", snake);
+        board.init();
+
         isGameOver = false;
-        snake.reset();
-        snake.revive();
-        board.generateFood();
+        speed = currentLevel.speed;
         ScoreManager.reset();
     }
 
     public void render(SpriteBatch batch) {
 
-        // Game Screen
-        board.render(batch);
-        snake.render(batch);
-        Writer.draw(batch,
-                "Score: " + ScoreManager.getScore(),
-                GameState.SCALE/2,
-                GameState.SCREEN_HEIGHT - GameState.SCALE/4);
+        Writer.Color(Color.WHITE);
+        Position middle = new Position(WIDTH/2, HEIGHT/2);
 
-        // Start Screen
         if (isGameStart) {
-            Writer.draw(batch,
-                    "WELCOME",
-                    (WIDTH - 100) / 2,
-                    (HEIGHT + 100) / 2);
-            Writer.draw(batch,
-                    "Press any key to start playing",
-                    (WIDTH - 250) / 2,
-                    (HEIGHT + 50) / 2);
-        }
-
-        // GameOver Screen
-        if (isGameOver) {
-            Writer.draw(batch,
-                    "GAME OVER",
-                    (WIDTH - 100) / 2,
-                    (HEIGHT + 100) / 2);
-            Writer.draw(batch,
-                    "Press any key to continue",
-                    (WIDTH - 250) / 2,
-                    (HEIGHT + 50) / 2);
+            // Start Message
+            Writer.Draw(batch, "WELCOME", new Position(middle.X - 100, middle.Y));
+            Writer.Draw(batch, "Press ENTER to start playing", new Position(middle.X - 200, middle.Y + 30));
+        } else if (isGameOver) {
+            // GameOver Message
+            Writer.Draw(batch, "GAME OVER",  new Position(middle.X - 100, middle.Y));
+            Writer.Draw(batch, "Press ENTER to start playing", new Position(middle.X - 200, middle.Y + 30));
+        } else {
+            // Game Screen
+            board.render(batch);
+            Writer.Draw(batch, "Score: " + ScoreManager.getScore(), new Position(10,10));
+            Writer.Draw(batch, "Lives: " + Snake.lives(), new Position(10,30));
         }
     }
 
+    @Override
+    public void OnInputReceived(InputEvent e) {
+        if(e.key == 66) keyPressed = true;
+        if(e.key == 111) cancel();
+    }
 }

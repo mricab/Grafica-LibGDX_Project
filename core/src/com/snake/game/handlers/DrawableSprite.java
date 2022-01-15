@@ -1,4 +1,4 @@
-package com.snake.game.models;
+package com.snake.game.handlers;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.Sprite;
@@ -6,16 +6,27 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 
 import com.snake.game.game.GameState;
 
-public class Item {
+public class DrawableSprite {
 
     protected Sprite sprite;
     protected float x;
     protected float y;
 
-    public Item(Sprite sprite, float x, float y) {
+    public DrawableSprite(Sprite sprite, float x, float y) {
         this.sprite = sprite;
         setPosition(x, y);
+        init();
     }
+
+    public DrawableSprite(Sprite sprite) {
+        this.sprite = sprite;
+        setSize(GameState.CELL_SIZE, GameState.CELL_SIZE);
+    }
+
+    private void init() {
+        sprite.flip(false,true);
+    }
+
 
     public void setX(float x) {
         this.x = x;
@@ -25,14 +36,13 @@ public class Item {
         this.y = y;
     }
 
-    public Item(Sprite sprite) {
-        this.sprite = sprite;
-        setSize(GameState.SCALE, GameState.SCALE);
-    }
-
 
     public void setRotation(float degree) {
         sprite.setRotation(degree);
+    }
+
+    public void setRotation(int rotation) {
+        sprite.setRotation(rotation);
     }
 
     public void setPosition(float x, float y) {
@@ -53,7 +63,7 @@ public class Item {
         sprite.setSize(width, height);
     }
 
-    public boolean isCollide(Item object) {
+    public boolean isCollide(DrawableSprite object) {
         return  x < object.x + object.getWidth()  && x + getWidth() > object.x &&
                 y < object.y + object.getHeight() && y + getHeight() > object.y;
     }
@@ -76,13 +86,10 @@ public class Item {
 
     @Override
     public String toString() {
-        return "GameObject{" +
+        return "Item{" +
                 "x=" + x +
                 ", y=" + y +
                 '}';
     }
 
-    public void setRotation(int rotation) {
-        sprite.setRotation(rotation);
-    }
 }

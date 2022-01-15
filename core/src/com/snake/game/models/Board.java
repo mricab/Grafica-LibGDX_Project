@@ -1,82 +1,128 @@
 package com.snake.game.models;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.math.MathUtils;
+import com.snake.game.primitives.CellType;
+import com.snake.game.primitives.Direction;
+import com.snake.game.primitives.MoveResponse;
+import com.snake.game.primitives.Position;
 
-import com.snake.game.game.AssetController;
-import com.snake.game.game.GameState;
-import com.snake.game.models.items.Cell;
-
-import static com.snake.game.game.GameState.SCALE;
 
 public class Board {
 
     private Cell[][] cells;
+    private Position size;
     private Snake snake;
-    public Item food;
-    private String[] foodTypes = { "food_1", "food_2", "food_3" };
-    private String[] obstacleTypes = { "obstacle_1", "obstacle_2", "obstacle_3" };
+//    private Cell snakeHead;
+//    private Cell snakeTail;
 
-
-    public Board(Snake snake, int width, int height) {
+    public Board(int rows, int cols, Snake snake) {
+        this.cells = new Cell[rows][cols];
+        this.size = new Position(cols, rows);
         this.snake = snake;
-        initBoard(width, height);
     }
 
-    private void initBoard(int width, int height) {
-        cells = new Cell[width / SCALE][height / SCALE];
-        for (int rowGrass = 0; rowGrass < cells.length; rowGrass++) {
-            for (int colGrass = 0; colGrass < cells[rowGrass].length; colGrass++) {
-                Cell cell = new Cell(AssetController.instance().getSprite(randomGrass(rowGrass, colGrass)), rowGrass * SCALE, colGrass * SCALE);
-                cells[rowGrass][colGrass] = cell;
-            }
-        }
+    public void init() {
+        generateFood();
     }
 
-    private String randomGrass(int row, int col) {
-        if (col % 2 == 0) {
-            if (row % 2 != 0) return "grass_1";
-            if (row % 2 == 0) return "grass_2";
-        } else if (col % 2 != 0) {
-            if (row % 2 != 0) return "grass_2";
-            if (row % 2 == 0) return "grass_1";
+    public void setCell(CellType type, Direction dir, Position pos) throws Exception {
+        if (pos.Y < 0 || pos.Y >= size.Y) throw new Exception("Invalid row index.");
+        if (pos.X < 0 || pos.X >= size.X) throw new Exception("Invalid col index.");
+
+        Cell newCell = new Cell(pos, type, dir);
+        cells[pos.Y][pos.X] = newCell;
+
+        switch (newCell.type) {
+            case SNAKE_HEAD: snake.head = newCell; break;
+            case SNAKE_TAIL: snake.tail = newCell; break;
+            default: break;
         }
-        return "grass_2";
     }
 
     public void render(SpriteBatch batch) {
-        // Background
-        for (Cell[] cell : cells) {
-            for (Cell aCell : cell) {
-                aCell.draw(batch);
+        for (Cell[] data: cells) {
+            for (Cell cell: data ) {
+                cell.draw(batch);
             }
         }
-        // Food
-        food.draw(batch);
+    }
+
+    public MoveResponse moveSnake(Direction dir) {
+
+        boolean eating = false;
+
+        Position oldHeadPos = new Position(snake.head.pos); Direction oldHeadDir = snake.head.dir;
+        Position oldTailPos = new Position(snake.tail.pos); Direction oldTailDir = snake.tail.dir;
+
+        // check
+        Position nextCellPos = oldHeadPos.next(oldHeadDir, size);
+        Cell nextCell = cells[nextCellPos.Y][nextCellPos.X];
+        if (isCollision(nextCell)) return MoveResponse.CRASHED;
+        if (isNourishment(nextCell)) eating = true;
+
+        // move
+        try {
+            // Replace old head with body
+            setCell(CellType.SNAKE_BODY, oldHeadDir, oldHeadPos);
+
+            // Create new head (with same dir)
+            Position newHeadPos = new Position(oldHeadPos.move(oldHeadDir, size));
+            setCell(CellType.SNAKE_HEAD, oldHeadDir, newHeadPos);
+
+            // Replace old tail with grass.
+            if(!eating) setCell(CellType.GRASS_1, Direction.RIGHT, oldTailPos);
+
+            // Calculate new tail position and change its type to tail.
+            if(!eating) {
+                Position newTailPos = oldTailPos.move(oldTailDir, size);
+                Direction lastBodyDir = cells[newTailPos.Y][newTailPos.X].dir;
+                setCell(CellType.SNAKE_TAIL, lastBodyDir, newTailPos);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        if(eating) {
+            generateFood();
+            return MoveResponse.EATEN;
+        }
+        else {
+            return MoveResponse.NONE;
+        }
+
+    }
+
+    public boolean isCollision(Cell nextCell) {
+        if(nextCell.type == CellType.OBSTACLE
+                || nextCell.type == CellType.SNAKE_BODY
+                || nextCell.type == CellType.SNAKE_HEAD
+                || nextCell.type == CellType.SNAKE_TAIL)
+        {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public boolean isNourishment(Cell nextCell) {
+        if(nextCell.type == CellType.FOOD_1
+                || nextCell.type == CellType.FOOD_2
+                || nextCell.type == CellType.FOOD_3)
+        {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public void generateFood() {
-        int foodType = MathUtils.random(foodTypes.length - 1);
-        Item newFood = new Item(AssetController.instance().getSprite(foodTypes[foodType]));
-        newFood.setPosition(randX(), randY());
-
-        for (Cell body : snake.getBody()) {
-            while (newFood.getX() == body.getX() && body.getY() == newFood.getY()) {
-                newFood.setPosition(randX(), randY());
-            }
+        Cell food = Food.generate(size);
+        while (cells[food.pos.Y][food.pos.X].type != CellType.GRASS_1) {
+            food = Food.generate(size);
         }
-        food = newFood;
-    }
-
-    private float randX() {
-        return MathUtils.random(1, GameState.BOARD_WIDTH - 1) * SCALE;
-    }
-
-    private float randY() {
-        return MathUtils.random(1, GameState.BOARD_HEIGHT - 1) * SCALE;
-    }
-
-    public void reset() {
-        generateFood();
+        cells[food.pos.Y][food.pos.X] = food;
     }
 }

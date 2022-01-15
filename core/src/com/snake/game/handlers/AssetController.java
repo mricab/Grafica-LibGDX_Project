@@ -1,4 +1,4 @@
-package com.snake.game.game;
+package com.snake.game.handlers;
 
 import com.badlogic.gdx.assets.AssetManager;
 import com.badlogic.gdx.assets.loaders.FileHandleResolver;
@@ -19,15 +19,12 @@ public class AssetController {
     public static final String ELEMENTS_PACK = "images/elements.pack";
     public static final String PIXEL_FONT = "fonts/pixel.ttf";
 
-    private AssetController() {
-
-    }
-
+    private AssetController() {}
     public static AssetController instance() {
         return instance;
     }
 
-    public void loadAsset() {
+    public void loadAssets() {
         loadFont();
         loadImages();
         assetManager.finishLoading();
@@ -41,6 +38,7 @@ public class AssetController {
         mySmallFont.fontFileName = PIXEL_FONT;
         mySmallFont.fontParameters.size = 16;
         mySmallFont.fontParameters.color = Color.WHITE;
+        mySmallFont.fontParameters.flip = true;
         assetManager.load(PIXEL_FONT, BitmapFont.class, mySmallFont);
     }
 
